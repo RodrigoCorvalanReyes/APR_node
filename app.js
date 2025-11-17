@@ -4,9 +4,20 @@ const ModbusRTU = require('modbus-serial');
 const path = require('path'); // <<< CORREGIDO EL ERROR DE INICIALIZACIÓN
 const net = require('net');
 const fs = require('fs');
+const mqtt = require('mqtt');
+
+// --- Configuración MQTT (Thingsboard) ---
+const TB_HOST = "";
+const TB_PORT = ;
+const TB_TOKEN = ""; // Access Token del dispositivo
+const TB_TOPIC = "";
+const MQTT_CLIENT_ID = `modbus-gateway-${Math.random().toString(16).substr(2, 8)}`;
+
+// --- Cliente MQTT ---
+let mqttClient = null;
 
 const app = express();
-const PORT = 3000;
+const PORT = 3001;
 
 // Cargar configuración de registros PM2120
 let pm2120Registers = [];
@@ -22,7 +33,7 @@ try {
 let config = {
     deviceId: 1,
     interval: 60000, // 60 segundos en milisegundos
-    modbusPort: 5020,
+    modbusPort: 502,
     modbusIp: '0.0.0.0'
 };
 
@@ -33,8 +44,31 @@ let reverseRegisterMap = new Map(); // Mapea índice -> dirección PM2120
 function buildRegisterMap() {
     let modbusIndex = 0;
 
+    // Handle the new "maleta virtual" registers first (addresses 1-4)
+    registerMap.set(1, modbusIndex);        // Temperature
+    reverseRegisterMap.set(modbusIndex, 1);
+    modbusIndex += 1;
+
+    registerMap.set(2, modbusIndex);        // Humidity
+    reverseRegisterMap.set(modbusIndex, 2);
+    modbusIndex += 1;
+
+    registerMap.set(3, modbusIndex);        // Control 1
+    reverseRegisterMap.set(modbusIndex, 3);
+    modbusIndex += 1;
+
+    registerMap.set(4, modbusIndex);        // Control 2
+    reverseRegisterMap.set(modbusIndex, 4);
+    modbusIndex += 1;
+
+    // Handle the rest of the PM2120 registers
     pm2120Registers.forEach(reg => {
         const address = reg.address;
+
+        // Skip addresses 1-4 since they're already handled above
+        if (address >= 1 && address <= 4) {
+            return; // Skip these as they are handled separately
+        }
 
         switch(reg.data_type) {
             case 'FLOAT32':
@@ -90,6 +124,10 @@ console.log(`[INIT] Total de registros Modbus: ${TOTAL_REGISTERS}`);
 let holdingRegisters = new Array(TOTAL_REGISTERS).fill(0);
 let dataGenerator = null;
 let modbusServer = null;
+
+// Estados para controlar generación y envío de datos
+let isDataGenerationEnabled = true;
+let isDataTransmissionEnabled = true;
 
 // Direcciones de controles industriales
 const PUMP1_ADDRESS = 4000;
@@ -169,13 +207,50 @@ function generateValue(generation) {
     }
 }
 
-// Función para generar datos aleatorios basados en PM2120
+// Función para generar datos aleatorios basados en PM2120 y maleta virtual
 function generateRandomData() {
+    if (!isDataGenerationEnabled) {
+        console.log(`[DATA] Generación de datos deshabilitada - omitiendo`);
+        // Si la generación está deshabilitada pero la transmisión está habilitada,
+        // aún se pueden enviar datos existentes
+        if (isDataTransmissionEnabled) {
+            console.log(`[DATA] Enviando datos existentes a Thingsboard`);
+            sendDataToThingsboard();
+        }
+        return;
+    }
+
     console.log(`[DATA] Generando datos - ${new Date().toISOString()}`);
 
+    // Handle "maleta virtual" registers (addresses 1-4)
+    // Temperature (address 1) - simulated between 220-240 (representing 22.0°C to 24.0°C)
+    const tempRegister = registerMap.get(1);
+    if (tempRegister !== undefined) {
+        const tempValue = Math.random() * (240 - 220) + 220;
+        holdingRegisters[tempRegister] = Math.floor(tempValue);
+    }
+
+    // Humidity (address 2) - simulated between 300-400 (representing 30.0% to 40.0%)
+    const humidityRegister = registerMap.get(2);
+    if (humidityRegister !== undefined) {
+        const humidityValue = Math.random() * (400 - 300) + 300;
+        holdingRegisters[humidityRegister] = Math.floor(humidityValue);
+    }
+
+    // Control registers 3 and 4 should maintain their set values (0 or 1), so we don't change them here
+    // They are set by user controls via API calls
+
+    // Handle PM2120 registers
     pm2120Registers.forEach((reg, i) => {
+        const address = reg.address;
+
+        // Skip addresses 1-4 as these are handled separately above
+        if (address >= 1 && address <= 4) {
+            return; // Skip these
+        }
+
         const value = generateValue(reg.generation);
-        const modbusIndex = registerMap.get(reg.address);
+        const modbusIndex = registerMap.get(address);
 
         switch(reg.data_type) {
             case 'FLOAT32':
@@ -220,7 +295,84 @@ function generateRandomData() {
     console.log(`  - Bomba 1 (${PUMP1_ADDRESS}): ${holdingRegisters[pump1Register] ? 'ON' : 'OFF'}`);
     console.log(`  - Bomba 2 (${PUMP2_ADDRESS}): ${holdingRegisters[pump2Register] ? 'ON' : 'OFF'}`);
     console.log(`  - Nivel agua (${WATER_LEVEL_ADDRESS}): ${holdingRegisters[waterLevelRegister]}%`);
+
+    console.log(`[DATA] Maleta Virtual:`);
+    console.log(`  - Temperatura (1): ${holdingRegisters[tempRegister] / 10}°C`);
+    console.log(`  - Humedad (2): ${holdingRegisters[humidityRegister] / 10}%`);
+    console.log(`  - Control 1 (3): ${holdingRegisters[registerMap.get(3)] ? 'ON' : 'OFF'}`);
+    console.log(`  - Control 2 (4): ${holdingRegisters[registerMap.get(4)] ? 'ON' : 'OFF'}`);
+
+    // Enviar datos a Thingsboard después de generarlos si está habilitado
+    if (isDataTransmissionEnabled) {
+        sendDataToThingsboard();
+    }
 }
+
+// --- Thingsboard Integration ---
+function connectToThingsboard() {
+    const options = {
+        port: TB_PORT,
+        host: TB_HOST,
+        clientId: MQTT_CLIENT_ID,
+        username: TB_TOKEN,
+        keepalive: 60,
+        reconnectPeriod: 10000, // 10 segundos
+        protocolId: 'MQTT',
+        protocolVersion: 4,
+        clean: true,
+        encoding: 'utf8'
+    };
+
+    console.log(`[MQTT] Conectando a Thingsboard en ${TB_HOST}:${TB_PORT}...`);
+    mqttClient = mqtt.connect(options);
+
+    mqttClient.on('connect', () => {
+        console.log('[MQTT] ✅ Conectado exitosamente a Thingsboard');
+    });
+
+    mqttClient.on('reconnect', () => {
+        console.log('[MQTT] Reconectando a Thingsboard...');
+    });
+
+    mqttClient.on('error', (err) => {
+        console.error('[MQTT] ❌ Error de conexión:', err.message);
+    });
+
+    mqttClient.on('close', () => {
+        console.log('[MQTT] Conexión con Thingsboard cerrada.');
+    });
+}
+
+function sendDataToThingsboard() {
+    if (!mqttClient || !mqttClient.connected) {
+        console.log('[MQTT] Cliente no conectado. Omitiendo envío de datos.');
+        return;
+    }
+
+    // Obtener los índices de los registros de la "maleta virtual"
+    const tempIndex = registerMap.get(1);
+    const humidityIndex = registerMap.get(2);
+    const di01Index = registerMap.get(3);
+    const di02Index = registerMap.get(4);
+
+    // Crear el payload con los datos de los registros
+    const payload = {
+        "Temperatura": holdingRegisters[tempIndex],
+        "Humedad": holdingRegisters[humidityIndex],
+        "DI01": holdingRegisters[di01Index],
+        "DI02": holdingRegisters[di02Index]
+    };
+
+    const payloadJson = JSON.stringify(payload);
+
+    console.log(`[MQTT] Enviando a Thingsboard: ${payloadJson}`);
+    mqttClient.publish(TB_TOPIC, payloadJson, { qos: 1 }, (err) => {
+        if (err) {
+            console.error('[MQTT] Error al publicar:', err);
+        }
+    });
+}
+// -----------------------------
 
 // Inicializar servidor Modbus
 function initModbusServer() {
@@ -281,7 +433,7 @@ function initModbusServer() {
     modbusServer.on('error', function(err) {
         console.error('[MODBUS] ❌ Error en servidor Modbus:', err.message);
         if (err.code === 'EADDRINUSE') {
-            console.log('[MODBUS] Puerto ocupado. Intenta con otro puerto o cierra la aplicación que esté usando el puerto 5020.');
+            console.log('[MODBUS] Puerto ocupado. Intenta con otro puerto o cierra la aplicación que esté usando el puerto 502.');
         } else if (err.code === 'EACCES') {
             console.log('[MODBUS] Sin permisos para usar el puerto. Ejecuta como administrador o usa un puerto > 1024.');
         }
@@ -391,16 +543,39 @@ function handleModbusRequest(data) {
 function startDataGeneration() {
     if (dataGenerator) {
         clearInterval(dataGenerator);
+        clearTimeout(dataGenerator); // Asegurar que también se limpie cualquier timeout
         console.log('[DATA] Deteniendo generador anterior');
     }
 
+    // Generar datos inmediatamente al iniciar
     generateRandomData();
 
     console.log(`[DATA] Configurando intervalo de generación: ${config.interval}ms (${config.interval/1000}s)`);
-    dataGenerator = setInterval(() => {
-        console.log(`[DATA] Ejecutando generación programada cada ${config.interval/1000}s`);
+
+    // Usar un enfoque basado en temporizador exacto para evitar desviaciones acumuladas
+    // Este enfoque calcula el momento exacto en que debe ocurrir la siguiente ejecución
+    let startTime = Date.now();
+    let executionCount = 1; // Ya se ejecutó una vez al inicio
+
+    function executeAndSchedule() {
+        console.log(`[DATA] Ejecutando generación programada #${executionCount} a las ${new Date().toISOString()}`);
         generateRandomData();
-    }, config.interval);
+        executionCount++;
+
+        // Calcular cuándo debería ocurrir la próxima ejecución para mantener intervalos precisos
+        const nextExecutionTime = startTime + (executionCount * config.interval);
+        const now = Date.now();
+        const timeUntilNext = Math.max(0, nextExecutionTime - now);
+
+        dataGenerator = setTimeout(executeAndSchedule, timeUntilNext);
+    }
+
+    // Calcular cuándo debería ocurrir la primera ejecución programada
+    const firstExecutionTime = startTime + (executionCount * config.interval);
+    const now = Date.now();
+    const timeUntilFirst = Math.max(0, firstExecutionTime - now);
+
+    dataGenerator = setTimeout(executeAndSchedule, timeUntilFirst);
 
     console.log(`[DATA] ✅ Generación de datos iniciada cada ${config.interval/1000} segundos`);
 }
@@ -453,15 +628,14 @@ app.post('/api/config', (req, res) => {
 
         console.log('[API] Configuración actualizada:', config);
 
-        setTimeout(() => {
-            try {
-                initModbusServer();
-                startDataGeneration();
-                console.log('[API] Servidor Modbus reiniciado exitosamente');
-            } catch (error) {
-                console.error('[API] Error reiniciando servidor Modbus:', error);
-            }
-        }, 100);
+        // Reiniciar inmediatamente con la nueva configuración
+        try {
+            initModbusServer();
+            startDataGeneration();
+            console.log('[API] Servidor Modbus y generación de datos reiniciados exitosamente');
+        } catch (error) {
+            console.error('[API] Error reiniciando servidor Modbus:', error);
+        }
 
         res.json({ success: true, config });
     } catch (error) {
@@ -552,6 +726,69 @@ app.get('/api/registers', (req, res) => {
     }
 });
 
+// API endpoints for "maleta virtual" controls
+app.post('/api/registers/maleta-controls', (req, res) => {
+    try {
+        console.log('[API] POST /api/registers/maleta-controls - Datos recibidos:', req.body);
+        const { control1, control2 } = req.body;
+
+        const control1Register = registerMap.get(3);
+        const control2Register = registerMap.get(4);
+
+        if (control1 !== undefined) holdingRegisters[control1Register] = (control1 === 'true' || control1 === true || control1 === 1) ? 1 : 0;
+        if (control2 !== undefined) holdingRegisters[control2Register] = (control2 === 'true' || control2 === true || control2 === 1) ? 1 : 0;
+
+        console.log(`[API] Controles maleta actualizados - Control 1 (3): ${holdingRegisters[control1Register] ? 'ON' : 'OFF'}, Control 2 (4): ${holdingRegisters[control2Register] ? 'ON' : 'OFF'}`);
+
+        res.json({
+            success: true,
+            controls: {
+                control1: holdingRegisters[control1Register],
+                control2: holdingRegisters[control2Register]
+            }
+        });
+    } catch (error) {
+        console.error('[API] Error en POST /api/registers/maleta-controls:', error);
+        res.status(400).json({ success: false, error: error.message });
+    }
+});
+
+app.get('/api/registers/maleta', (req, res) => {
+    try {
+        console.log('[API] GET /api/registers/maleta - Enviando datos de maleta virtual');
+
+        const tempRegister = registerMap.get(1);
+        const humidityRegister = registerMap.get(2);
+        const control1Register = registerMap.get(3);
+        const control2Register = registerMap.get(4);
+
+        const responseData = {
+            maleta: {
+                temperature: {
+                    value: holdingRegisters[tempRegister],
+                    displayValue: (holdingRegisters[tempRegister] / 10).toFixed(1) + '°C'
+                },
+                humidity: {
+                    value: holdingRegisters[humidityRegister],
+                    displayValue: (holdingRegisters[humidityRegister] / 10).toFixed(1) + '%'
+                },
+                control1: {
+                    value: holdingRegisters[control1Register]
+                },
+                control2: {
+                    value: holdingRegisters[control2Register]
+                }
+            }
+        };
+
+        res.json(responseData);
+
+    } catch (error) {
+        console.error('[API] Error en GET /api/registers/maleta:', error);
+        res.status(500).json({ error: 'Error interno del servidor', details: error.message });
+    }
+});
+
 
 app.get('/api/pm2120', (req, res) => {
     try {
@@ -630,6 +867,46 @@ app.get('/api/registers/table', (req, res) => {
     }
 });
 
+// API endpoints para controlar generación y transmisión de datos
+app.get('/api/data-control', (req, res) => {
+    try {
+        console.log('[API] GET /api/data-control - Enviando estados de control');
+        res.json({
+            dataGenerationEnabled: isDataGenerationEnabled,
+            dataTransmissionEnabled: isDataTransmissionEnabled
+        });
+    } catch (error) {
+        console.error('[API] Error en GET /api/data-control:', error);
+        res.status(500).json({ error: 'Error interno del servidor', details: error.message });
+    }
+});
+
+app.post('/api/data-control', (req, res) => {
+    try {
+        console.log('[API] POST /api/data-control - Datos recibidos:', req.body);
+        const { dataGenerationEnabled, dataTransmissionEnabled } = req.body;
+
+        if (dataGenerationEnabled !== undefined) {
+            isDataGenerationEnabled = Boolean(dataGenerationEnabled);
+            console.log(`[API] Generación de datos ${isDataGenerationEnabled ? 'habilitada' : 'deshabilitada'}`);
+        }
+
+        if (dataTransmissionEnabled !== undefined) {
+            isDataTransmissionEnabled = Boolean(dataTransmissionEnabled);
+            console.log(`[API] Transmisión de datos ${isDataTransmissionEnabled ? 'habilitada' : 'deshabilitada'}`);
+        }
+
+        res.json({
+            success: true,
+            dataGenerationEnabled: isDataGenerationEnabled,
+            dataTransmissionEnabled: isDataTransmissionEnabled
+        });
+    } catch (error) {
+        console.error('[API] Error en POST /api/data-control:', error);
+        res.status(400).json({ success: false, error: error.message });
+    }
+});
+
 // Inicializar aplicación
 function init() {
     try {
@@ -648,6 +925,11 @@ function init() {
         initModbusServer();
         startDataGeneration();
 
+        // --- Conectar a Thingsboard e iniciar envío de datos ---
+        connectToThingsboard();
+        console.log('[INIT] ✅ Conexión con Thingsboard iniciada.');
+
+
         console.log('[INIT] ✅ Aplicación iniciada correctamente');
     } catch (error) {
         console.error('[INIT] ❌ Error iniciando aplicación:', error);
@@ -664,7 +946,10 @@ app.listen(PORT, () => {
 // Manejo de cierre limpio
 process.on('SIGINT', () => {
     console.log('\nCerrando aplicación...');
-    if (dataGenerator) clearInterval(dataGenerator);
+    if (dataGenerator) {
+        clearInterval(dataGenerator);
+        clearTimeout(dataGenerator); // Asegurar que también se limpie cualquier timeout
+    }
     if (modbusServer) {
         try {
             modbusServer.close();
@@ -672,5 +957,13 @@ process.on('SIGINT', () => {
             console.log('Error cerrando servidor Modbus:', err.message);
         }
     }
-    process.exit(0);
+    // --- Desconectar MQTT ---
+    if (mqttClient) {
+        mqttClient.end(() => {
+            console.log('[MQTT] Cliente MQTT desconectado.');
+            process.exit(0);
+        });
+    } else {
+        process.exit(0);
+    }
 });

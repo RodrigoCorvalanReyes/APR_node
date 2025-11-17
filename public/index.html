@@ -553,6 +553,114 @@
         <div class="section">
             <div class="section-header">
                 <div class="section-title">
+                    Control de Datos
+                    <div class="section-badge">Generación y Transmisión</div>
+                </div>
+            </div>
+            <div class="grid grid-3">
+                <div class="control-group">
+                    <div class="control-header">
+                        Generación de Datos
+                    </div>
+                    <form id="dataGenForm">
+                        <div class="switch-control">
+                            <span class="switch-label">Generar Datos</span>
+                            <div class="switch-wrapper">
+                                <div class="switch" id="dataGenSwitch">
+                                    <input type="checkbox" id="dataGen" name="dataGen" style="display: none;">
+                                </div>
+                                <span class="switch-status status-off" id="dataGenStatus">OFF</span>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="control-group">
+                    <div class="control-header">
+                        Transmisión a ThingsBoard
+                    </div>
+                    <form id="dataTransForm">
+                        <div class="switch-control">
+                            <span class="switch-label">Enviar a ThingsBoard</span>
+                            <div class="switch-wrapper">
+                                <div class="switch" id="dataTransSwitch">
+                                    <input type="checkbox" id="dataTrans" name="dataTrans" style="display: none;">
+                                </div>
+                                <span class="switch-status status-off" id="dataTransStatus">OFF</span>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="control-group">
+                    <div class="control-header">
+                        Estado Actual
+                    </div>
+                    <div style="padding: 10px; text-align: center;">
+                        <div id="dataControlStatus" style="font-size: 0.85rem; color: var(--text-secondary);">
+                            Generando: <span id="genStatusText">ON</span> |
+                            Enviando: <span id="transStatusText">ON</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title">
+                    Maleta Virtual
+                    <div class="section-badge">1-4</div>
+                </div>
+            </div>
+            <div class="grid grid-2">
+                <div class="control-group">
+                    <div class="control-header">
+                        Controles Maleta Virtual
+                    </div>
+                    <form id="maletaControlsForm">
+                        <div class="switch-control">
+                            <span class="switch-label">Control 1 (3)</span>
+                            <div class="switch-wrapper">
+                                <div class="switch" id="control1Switch">
+                                    <input type="checkbox" id="control1" name="control1" style="display: none;">
+                                </div>
+                                <span class="switch-status status-off" id="control1Status">OFF</span>
+                            </div>
+                        </div>
+                        <div class="switch-control">
+                            <span class="switch-label">Control 2 (4)</span>
+                            <div class="switch-wrapper">
+                                <div class="switch" id="control2Switch">
+                                    <input type="checkbox" id="control2" name="control2" style="display: none;">
+                                </div>
+                                <span class="switch-status status-off" id="control2Status">OFF</span>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="control-group">
+                    <div class="control-header">
+                        Sensores Maleta Virtual
+                    </div>
+                    <div class="status-grid">
+                        <div class="status-card">
+                            <div class="status-label">Temperatura (1)</div>
+                            <div class="status-value" id="maletaTempValue">--</div>
+                        </div>
+                        <div class="status-card">
+                            <div class="status-label">Humedad (2)</div>
+                            <div class="status-value" id="maletaHumValue">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title">
                     Controles Industriales
                     <div class="section-badge">4000-4002</div>
                 </div>
@@ -581,7 +689,6 @@
                                 <span class="switch-status status-off" id="pump2Status">OFF</span>
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-success" style="margin-top: 20px;">Actualizar Bombas</button>
                     </form>
                 </div>
 
@@ -675,7 +782,7 @@
                     <td>${item.description}</td>
                     <td>${dataItem ? dataItem.displayValue : '--'}</td>
                     <td>${dataItem ? (dataItem.unit || '') : (item.unit || '--')}</td>
-                    <td>${item.dataType}</td>
+                    <td>${dataItem ? dataItem.dataType : item.data_type}</td>
                 `;
                 tableBody.appendChild(row);
             });
@@ -880,34 +987,9 @@
         }
 
         function startCountdown(interval) {
-            if (nextUpdateCountdown) clearInterval(nextUpdateCountdown);
-            
-            let seconds = interval;
-            const updateCountdown = () => {
-                document.getElementById('nextUpdate').textContent = `${seconds}s`;
-                seconds--;
-                if (seconds < 0) {
-                    seconds = interval;
-                    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
-                    loadPM2120Data();
-                }
-            };
-            
-            updateCountdown();
-            nextUpdateCountdown = setInterval(updateCountdown, 1000);
+            // Esta función ya no se usa con la nueva lógica de actualización
+            // La cuenta regresiva ahora se maneja directamente en startAutoRefresh
         }
-
-        document.getElementById('pump1Switch').addEventListener('click', () => {
-            const checkbox = document.getElementById('pump1');
-            checkbox.checked = !checkbox.checked;
-            updatePumpSwitch('pump1', checkbox.checked);
-        });
-
-        document.getElementById('pump2Switch').addEventListener('click', () => {
-            const checkbox = document.getElementById('pump2');
-            checkbox.checked = !checkbox.checked;
-            updatePumpSwitch('pump2', checkbox.checked);
-        });
 
         document.getElementById('waterLevel').addEventListener('input', (e) => {
             document.getElementById('waterLevelValue').textContent = e.target.value;
@@ -938,7 +1020,9 @@
                 
                 if (result.success) {
                     showMessage('Configuración actualizada correctamente');
-                    setTimeout(loadConfig, 2000);
+                    currentConfig.interval = parseInt(config.interval);
+                    document.getElementById('configuredInterval').textContent = `${currentConfig.interval}s`;
+                    startAutoRefresh();
                 } else {
                     throw new Error(result.error || 'Error desconocido');
                 }
@@ -948,30 +1032,43 @@
             }
         });
 
-        document.getElementById('pumpForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const pump1 = document.getElementById('pump1').checked;
-            const pump2 = document.getElementById('pump2').checked;
+        document.getElementById('pump1Switch').addEventListener('click', () => {
+            const checkbox = document.getElementById('pump1');
+            checkbox.checked = !checkbox.checked;
+            updatePumpSwitch('pump1', checkbox.checked);
+            updatePump('pump1', checkbox.checked);
+        });
+
+        document.getElementById('pump2Switch').addEventListener('click', () => {
+            const checkbox = document.getElementById('pump2');
+            checkbox.checked = !checkbox.checked;
+            updatePumpSwitch('pump2', checkbox.checked);
+            updatePump('pump2', checkbox.checked);
+        });
+
+        async function updatePump(pumpId, isOn) {
+            const payload = { [pumpId]: isOn };
             
             try {
                 const response = await fetch('/api/registers/pumps', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pump1, pump2 })
+                    body: JSON.stringify(payload)
                 });
                 
                 const result = await response.json();
                 if (result.success) {
-                    showMessage('Bombas actualizadas correctamente');
+                    showMessage(`Bomba ${pumpId === 'pump1' ? '1' : '2'} actualizada correctamente`);
                 } else {
-                    throw new Error(result.error || 'Error actualizando bombas');
+                    throw new Error(result.error || `Error actualizando bomba ${pumpId}`);
                 }
             } catch (error) {
-                console.error('[CLIENT] Error actualizando bombas:', error);
-                showMessage(`Error de bombas: ${error.message}`, 'error');
+                console.error(`[CLIENT] Error actualizando bomba ${pumpId}:`, error);
+                showMessage(`Error de bomba: ${error.message}`, 'error');
+                // Revert UI on error
+                loadControls();
             }
-        });
+        }
 
         document.getElementById('waterLevelForm').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -997,11 +1094,295 @@
             }
         });
 
-        setInterval(loadConfig, 10000);
-        setInterval(loadPM2120Data, 30000);
+        // Función para cargar estados de controles de la maleta virtual
+        async function loadMaletaControls() {
+            try {
+                const response = await fetch('/api/registers/maleta');
+                if (!response.ok) {
+                    // Si hay error en la respuesta, mostrar valores por defecto
+                    document.getElementById('maletaTempValue').textContent = '--';
+                    document.getElementById('maletaHumValue').textContent = '--';
+                    return;
+                }
 
-        // Cargar configuración inicial
-        loadConfig();
+                const data = await response.json();
+
+                if (data && data.maleta) {
+                    updateControlSwitch('control1', data.maleta.control1.value === 1);
+                    updateControlSwitch('control2', data.maleta.control2.value === 1);
+
+                    // Asegurar que los valores existen antes de mostrarlos
+                    if (data.maleta.temperature) {
+                        document.getElementById('maletaTempValue').textContent = data.maleta.temperature.displayValue || '--';
+                    } else {
+                        document.getElementById('maletaTempValue').textContent = '--';
+                    }
+
+                    if (data.maleta.humidity) {
+                        document.getElementById('maletaHumValue').textContent = data.maleta.humidity.displayValue || '--';
+                    } else {
+                        document.getElementById('maletaHumValue').textContent = '--';
+                    }
+                } else {
+                    // Si no hay datos válidos, mostrar "--"
+                    document.getElementById('maletaTempValue').textContent = '--';
+                    document.getElementById('maletaHumValue').textContent = '--';
+                }
+            } catch (error) {
+                console.error('[CLIENT] Error cargando controles de maleta virtual:', error);
+                // En caso de error, mostrar "--" para indicar que no hay datos
+                document.getElementById('maletaTempValue').textContent = '--';
+                document.getElementById('maletaHumValue').textContent = '--';
+            }
+        }
+
+        function updateControlSwitch(controlId, isOn) {
+            const switchElement = document.getElementById(controlId + 'Switch');
+            const statusElement = document.getElementById(controlId + 'Status');
+            const checkbox = document.getElementById(controlId);
+
+            checkbox.checked = isOn;
+
+            if (isOn) {
+                switchElement.classList.add('active');
+                statusElement.textContent = 'ON';
+                statusElement.className = 'switch-status status-on';
+            } else {
+                switchElement.classList.remove('active');
+                statusElement.textContent = 'OFF';
+                statusElement.className = 'switch-status status-off';
+            }
+        }
+
+        // Event listeners para los controles de la maleta virtual
+        document.getElementById('control1Switch').addEventListener('click', () => {
+            const checkbox = document.getElementById('control1');
+            checkbox.checked = !checkbox.checked;
+            updateControlSwitch('control1', checkbox.checked);
+            updateMaletaControl('control1', checkbox.checked);
+        });
+
+        document.getElementById('control2Switch').addEventListener('click', () => {
+            const checkbox = document.getElementById('control2');
+            checkbox.checked = !checkbox.checked;
+            updateControlSwitch('control2', checkbox.checked);
+            updateMaletaControl('control2', checkbox.checked);
+        });
+
+        async function updateMaletaControl(controlId, isOn) {
+            const payload = { [controlId]: isOn };
+
+            try {
+                const response = await fetch('/api/registers/maleta-controls', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    showMessage(`Control de maleta ${controlId === 'control1' ? '1' : '2'} actualizado correctamente`);
+                } else {
+                    throw new Error(result.error || `Error actualizando control de maleta ${controlId}`);
+                }
+            } catch (error) {
+                console.error(`[CLIENT] Error actualizando control de maleta ${controlId}:`, error);
+                showMessage(`Error de control de maleta: ${error.message}`, 'error');
+                // Revert UI on error
+                loadMaletaControls();
+            }
+        }
+
+        // Iniciar actualizaciones basadas en intervalo configurado
+        function startAutoRefresh() {
+            // Limpiar intervalos anteriores si existen
+            if (updateInterval) clearInterval(updateInterval);
+            if (nextUpdateCountdown) clearInterval(nextUpdateCountdown);
+
+            // Establecer cuenta regresiva que actualice datos cuando llegue a cero
+            let secondsLeft = currentConfig.interval || 60;
+            document.getElementById('nextUpdate').textContent = `${secondsLeft}s`;
+
+            // Actualizar datos inmediatamente
+            document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+            loadPM2120Data();
+            loadMaletaControls();
+            loadControls();
+
+            // Iniciar cuenta regresiva que se actualice cada segundo
+            nextUpdateCountdown = setInterval(() => {
+                secondsLeft--;
+                if (secondsLeft >= 0) {
+                    document.getElementById('nextUpdate').textContent = `${secondsLeft}s`;
+                }
+
+                if (secondsLeft <= 0) {
+                    // Actualizar datos cuando llega a cero
+                    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+                    loadPM2120Data();
+                    loadMaletaControls();
+                    loadControls();
+
+                    // Reiniciar contador al intervalo configurado
+                    secondsLeft = currentConfig.interval || 60;
+                }
+            }, 1000);
+
+            // Actualizar configuración cada 30 segundos para mantener sincronización
+            // pero solo para obtener posibles cambios en la configuración desde el backend
+            // Usar un identificador diferente para evitar conflictos
+            if (typeof configCheckInterval !== 'undefined' && configCheckInterval) {
+                clearInterval(configCheckInterval);
+            }
+            configCheckInterval = setInterval(async () => {
+                try {
+                    const response = await fetch('/api/config');
+                    if (!response.ok) return;
+
+                    const newConfig = await response.json();
+                    if (newConfig.error) return;
+
+                    if (newConfig.interval !== currentConfig.interval) {
+                        // Si el intervalo cambió, actualizar la configuración y reiniciar el sistema de actualización
+                        currentConfig = newConfig;
+                        clearInterval(updateInterval);
+                        startAutoRefresh(); // Reiniciar con nuevo intervalo
+                    }
+                } catch (error) {
+                    console.error('[CLIENT] Error checking config changes:', error);
+                }
+            }, 30000);
+        }
+
+        // Función para cargar estados de control de datos
+        async function loadDataControl() {
+            try {
+                const response = await fetch('/api/data-control');
+                if (!response.ok) return;
+
+                const data = await response.json();
+
+                if (data) {
+                    updateDataGenSwitch(data.dataGenerationEnabled);
+                    updateDataTransSwitch(data.dataTransmissionEnabled);
+                }
+            } catch (error) {
+                console.error('[CLIENT] Error cargando controles de datos:', error);
+            }
+        }
+
+        function updateDataGenSwitch(isOn) {
+            const switchElement = document.getElementById('dataGenSwitch');
+            const statusElement = document.getElementById('dataGenStatus');
+            const checkbox = document.getElementById('dataGen');
+
+            checkbox.checked = isOn;
+
+            if (isOn) {
+                switchElement.classList.add('active');
+                statusElement.textContent = 'ON';
+                statusElement.className = 'switch-status status-on';
+            } else {
+                switchElement.classList.remove('active');
+                statusElement.textContent = 'OFF';
+                statusElement.className = 'switch-status status-off';
+            }
+
+            // Actualizar el estado de texto también
+            if (document.getElementById('genStatusText')) {
+                document.getElementById('genStatusText').textContent = isOn ? 'ON' : 'OFF';
+                document.getElementById('genStatusText').className = isOn ? 'status-on' : 'status-off';
+            }
+        }
+
+        function updateDataTransSwitch(isOn) {
+            const switchElement = document.getElementById('dataTransSwitch');
+            const statusElement = document.getElementById('dataTransStatus');
+            const checkbox = document.getElementById('dataTrans');
+
+            checkbox.checked = isOn;
+
+            if (isOn) {
+                switchElement.classList.add('active');
+                statusElement.textContent = 'ON';
+                statusElement.className = 'switch-status status-on';
+            } else {
+                switchElement.classList.remove('active');
+                statusElement.textContent = 'OFF';
+                statusElement.className = 'switch-status status-off';
+            }
+
+            // Actualizar el estado de texto también
+            if (document.getElementById('transStatusText')) {
+                document.getElementById('transStatusText').textContent = isOn ? 'ON' : 'OFF';
+                document.getElementById('transStatusText').className = isOn ? 'status-on' : 'status-off';
+            }
+        }
+
+        function updateDataControl(dataGenerationEnabled, dataTransmissionEnabled) {
+            const payload = {
+                dataGenerationEnabled: dataGenerationEnabled,
+                dataTransmissionEnabled: dataTransmissionEnabled
+            };
+
+            fetch('/api/data-control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    showMessage('Controles de datos actualizados correctamente');
+                    updateDataGenSwitch(result.dataGenerationEnabled);
+                    updateDataTransSwitch(result.dataTransmissionEnabled);
+                } else {
+                    throw new Error(result.error || 'Error actualizando controles de datos');
+                }
+            })
+            .catch(error => {
+                console.error('[CLIENT] Error actualizando controles de datos:', error);
+                showMessage(`Error de controles de datos: ${error.message}`, 'error');
+                // Revert UI on error by reloading current state
+                loadDataControl();
+            });
+        }
+
+        // Event listeners para los controles de generación y transmisión
+        document.getElementById('dataGenSwitch').addEventListener('click', () => {
+            const checkbox = document.getElementById('dataGen');
+            checkbox.checked = !checkbox.checked;
+            updateDataGenSwitch(checkbox.checked);
+            updateDataControl(checkbox.checked, document.getElementById('dataTrans').checked);
+            updateStatusText(checkbox.checked, document.getElementById('dataTrans').checked);
+        });
+
+        document.getElementById('dataTransSwitch').addEventListener('click', () => {
+            const checkbox = document.getElementById('dataTrans');
+            checkbox.checked = !checkbox.checked;
+            updateDataTransSwitch(checkbox.checked);
+            updateDataControl(document.getElementById('dataGen').checked, checkbox.checked);
+            updateStatusText(document.getElementById('dataGen').checked, checkbox.checked);
+        });
+
+        // Función para actualizar el texto de estado
+        function updateStatusText(genEnabled, transEnabled) {
+            const genText = document.getElementById('genStatusText');
+            const transText = document.getElementById('transStatusText');
+
+            genText.textContent = genEnabled ? 'ON' : 'OFF';
+            genText.className = genEnabled ? 'status-on' : 'status-off';
+
+            transText.textContent = transEnabled ? 'ON' : 'OFF';
+            transText.className = transEnabled ? 'status-on' : 'status-off';
+        }
+
+        // Cargar configuración inicial y comenzar actualizaciones
+        loadConfig().then(() => {
+            startAutoRefresh();
+            // Cargar controles de datos después de cargar la configuración principal
+            setTimeout(loadDataControl, 1000);
+        });
     </script>
 </body>
 </html>

@@ -1,5 +1,9 @@
 
 [
+    {"description": "Temperatura Maleta Virtual", "address": 1, "data_type": "INT16U", "unit": "°C", "generation": {"type": "uniform", "params": [220, 240]}},
+    {"description": "Humedad Maleta Virtual", "address": 2, "data_type": "INT16U", "unit": "%", "generation": {"type": "uniform", "params": [300, 400]}},
+    {"description": "Control Maleta Virtual 1", "address": 3, "data_type": "INT16U", "unit": "", "generation": {"type": "fixed", "params": [0]}},
+    {"description": "Control Maleta Virtual 2", "address": 4, "data_type": "INT16U", "unit": "", "generation": {"type": "fixed", "params": [0]}},
     {"description": "Current A", "address": 3000, "data_type": "FLOAT32", "unit": "A", "generation": {"type": "uniform", "params": [10.0, 30.0]}},
     {"description": "Current B", "address": 3002, "data_type": "FLOAT32", "unit": "A", "generation": {"type": "uniform", "params": [10.0, 30.0]}},
     {"description": "Current C", "address": 3004, "data_type": "FLOAT32", "unit": "A", "generation": {"type": "uniform", "params": [10.0, 30.0]}},
@@ -75,5 +79,8 @@
     {"description": "Current Demand Subinterval Duration", "address": 3713, "data_type": "INT16U", "unit": "minuto", "generation": {"type": "fixed", "params": [1]}},
     {"description": "Current Demand Elapsed Time in Interval", "address": 3714, "data_type": "INT16U", "unit": "segundo", "generation": {"type": "randint", "params": [0, 900]}},
     {"description": "Current Demand Elapsed Time in Subinterval", "address": 3715, "data_type": "INT16U", "unit": "segundo", "generation": {"type": "randint", "params": [0, 60]}},
-    {"description": "Current Demand Peak Reset Date/Time", "address": 3716, "data_type": "DATETIME", "unit": "", "generation": {"type": "timestamp"}}
+    {"description": "Current Demand Peak Reset Date/Time", "address": 3716, "data_type": "DATETIME", "unit": "", "generation": {"type": "timestamp"}},
+    {"description": "Control Bomba 1", "address": 4000, "data_type": "INT16", "unit": "", "generation": {"type": "fixed", "params": [0]}},
+    {"description": "Control Bomba 2", "address": 4001, "data_type": "INT16", "unit": "", "generation": {"type": "fixed", "params": [0]}},
+    {"description": "Nivel agua", "address": 4002, "data_type": "INT16", "unit": "%", "generation": {"type": "fixed", "params": [50]}}
 ]

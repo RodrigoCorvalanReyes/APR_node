@@ -1,7 +1,6 @@
-Simulador de datos Modbus - Estacion Virtual
+}# Simulador Modbus TCP PM2120 - Estacion Virtual
 
 Una aplicación web Node.js que simula un medidor de energía PM2120 con datos Modbus TCP en tiempo real.
-Node.
 
 ## Características
 
@@ -65,7 +64,7 @@ Para ejecutar la aplicación como un servicio persistente en segundo plano, se r
 
 
 ### 3. Configurar la Aplicación
-Abre tu navegador en: `http://localhost:3000`
+Abre tu navegador en: `http://localhost:3001`
 
 Configura los parámetros según tu necesidad:
 
